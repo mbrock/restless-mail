@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset=utf-8>
+<table>
+<thead>
+<th>Date</th>
+<th>From</th>
+<th>Subject</th>
+</thead>
+<tbody id=summary>
+</tbody>
+</table>
+<script>
+fetch("http://localhost:1025/summary").then(
+  x => x.json()
+).then(
+  x => x.forEach(
+    y => {
+      let tr = document.createElement("TR")
+      let xs = [
+        document.createElement("TD"),
+        document.createElement("TD"),
+        document.createElement("TD"),
+      ]
+      xs[0].appendChild(document.createTextNode(y.summaryDate))
+      xs[1].appendChild(document.createTextNode(y.summaryFrom))
+      xs[2].appendChild(document.createTextNode(y.summarySubject))
+      xs.forEach(td => tr.appendChild(td))
+      summary.appendChild(tr)
+    }
+  )
+)
+</script>
