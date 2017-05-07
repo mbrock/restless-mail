@@ -1,31 +1,56 @@
 <!doctype html>
 <meta charset=utf-8>
 <table>
-<thead>
-<th>Date</th>
-<th>From</th>
-<th>Subject</th>
-</thead>
 <tbody id=summary>
 </tbody>
 </table>
+<style>
+html { font: 16px/18px "fantasque sans mono"; }
+* { box-sizing: border-box; }
+td:first-child { white-space: nowrap; }
+td:nth-child(2) { max-width: 20em; white-space: nowrap; overflow-x: hidden; }
+td { padding-right: 1em; height: 1rem; }
+table { max-width: 100%; }
+td:last-child { overflow-x: hidden; }
+th { text-align: left; }
+
+td:nth-child(1) { color: #555; }
+td:nth-child(2) { font-weight: bold; text-align: right; }
+td:nth-child(3) { color: #333; }
+
+.dumb { display: none; }
+</style>
 <script>
+let previousDate
+let row = (date, from, subject, klass) => {
+  let tr = document.createElement("TR")
+  tr.className = klass
+  let xs = [
+    document.createElement("TD"),
+    document.createElement("TD"),
+    document.createElement("TD"),
+  ]
+  xs[0].appendChild(document.createTextNode(date))
+  xs[1].appendChild(document.createTextNode(from))
+  xs[2].appendChild(document.createTextNode(subject))
+  xs.forEach(td => tr.appendChild(td))
+  summary.appendChild(tr)
+}
 fetch("http://localhost:1025/summary").then(
   x => x.json()
 ).then(
   x => x.forEach(
     y => {
-      let tr = document.createElement("TR")
-      let xs = [
-        document.createElement("TD"),
-        document.createElement("TD"),
-        document.createElement("TD"),
-      ]
-      xs[0].appendChild(document.createTextNode(y.summaryDate))
-      xs[1].appendChild(document.createTextNode(y.summaryFrom))
-      xs[2].appendChild(document.createTextNode(y.summarySubject))
-      xs.forEach(td => tr.appendChild(td))
-      summary.appendChild(tr)
+      let date = y.summaryDate.substring(0, 10)
+      if (previousDate && date != previousDate)
+        row(" ", " ", " ")
+      previousDate = date
+      row(
+        date,
+        y.summaryFrom.replace(/<.*>/, ""),
+        y.summarySubject,
+        y.summaryFrom.includes("notifications") ? "dumb" : ""
+      )
     }
   )
 )

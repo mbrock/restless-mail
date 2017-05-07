@@ -62,8 +62,9 @@ type MailAPI = "summary" :> Get '[JSON] [Summary]
 main :: IO ()
 main = do
   maildir <- fromString <$> getEnv "MAILDIR"
-  x <- runSafeT $ scan maildir
-  run 1025 (simpleCors (serve (Proxy :: Proxy MailAPI) (return (toList x))))
+  summaries <- Seq.sort <$> runSafeT (scan maildir)
+  run 1025 $ simpleCors (serve (Proxy :: Proxy MailAPI)
+                           (return (toList summaries)))
 
 scan maildir =
   Pipes.fold (Seq.|>) mempty id .
@@ -95,7 +96,7 @@ data Summary = Summary
 instance ToJSON Summary
 
 instance Ord Summary where
-  compare = comparing summaryDate
+  compare = flip (comparing summaryDate)
 
 data HeaderField = HeaderField
   { headerName :: ByteString
