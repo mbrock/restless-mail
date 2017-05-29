@@ -1,3 +1,4 @@
+{-# Language TemplateHaskell #-}
 {-# Language DataKinds #-}
 {-# Language TypeOperators #-}
 {-# Language DeriveGeneric #-}
@@ -22,6 +23,9 @@ import Data.List (find)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
 import Data.Sequence (Seq)
+import Data.Foldable (forM_, toList)
+
+import Control.Lens
 
 import qualified Data.Sequence as Seq
 
@@ -43,12 +47,19 @@ import System.Environment
 import Filesystem
 import Filesystem.Path.CurrentOS
 
+import Data.Text.Format
+
 import qualified Data.Attoparsec.ByteString        as A
 import qualified Data.Attoparsec.ByteString.Char8  as A8
 import qualified Data.ByteString as BS
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Encoding.Error as Text
+
+import qualified Data.Text.Lazy as LazyText
+import qualified Data.Text.Lazy.IO as LazyText
+
+import qualified Data.Vector as Vec
 
 import GHC.Generics
 
@@ -57,34 +68,14 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
 
-type MailAPI = "summary" :> Get '[JSON] [Summary]
-
-main :: IO ()
-main = do
-  maildir <- fromString <$> getEnv "MAILDIR"
-  summaries <- Seq.sort <$> runSafeT (scan maildir)
-  run 1025 $ simpleCors (serve (Proxy :: Proxy MailAPI)
-                           (return (toList summaries)))
-
-scan maildir =
-  Pipes.fold (Seq.|>) mempty id .
-    for (every (childOf maildir)) $ \path -> do
-      result <- liftIO (mail path)
-      case result of
-        Just (Right x) -> yield x
-        _ -> liftIO . print $ "ignoring " ++ show path
-
-idFromPath x =
-  case toText (filename x) of
-    Left _ -> error "dumb"
-    Right s -> fst (Text.breakOn ":" s)
-
-mail path =
-  withFile path ReadMode $ \h ->
-    do x <- evalStateT
-              (Pipes.Attoparsec.parse (parseSummary (idFromPath path)))
-              (fromHandle h)
-       return x
+import Brick
+import Brick.Focus
+import Brick.Widgets.Border
+import Brick.Widgets.Border.Style
+import Brick.Widgets.Center
+import Brick.Widgets.Edit
+import Brick.Widgets.List
+import qualified Graphics.Vty as Vty
 
 data Summary = Summary
   { summaryId      :: Text
@@ -102,6 +93,114 @@ data HeaderField = HeaderField
   { headerName :: ByteString
   , headerBody :: ByteString
   } deriving (Show, Ord, Eq)
+
+type MailAPI = "summary" :> Get '[JSON] [Summary]
+
+data UiPane = SummaryPane | BodyPane
+  deriving (Eq, Ord, Show)
+
+type UiWidget = Widget UiPane
+
+data UiState = UiState
+  { _uiSummaryList :: List UiPane Summary
+  }
+
+makeLenses ''UiState
+
+main :: IO ()
+main = do
+  maildir <- fromString <$> getEnv "MAILDIR"
+  summaries <- Seq.sort <$> runSafeT (scan maildir)
+
+  _ <- defaultMain app $
+    UiState
+      { _uiSummaryList =
+          list SummaryPane (Vec.fromList (toList summaries)) 3
+      }
+
+  return ()
+
+app :: App UiState () UiPane
+app = App
+  { appDraw = drawUi
+  , appChooseCursor = neverShowCursor
+  , appHandleEvent = \s e ->
+      case (s, e) of
+        (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          halt s
+        (_, VtyEvent e') -> do
+          s' <- handleEventLensed s uiSummaryList handleListEvent e'
+          continue s'
+        _ ->
+          continue s
+  , appStartEvent = return
+  , appAttrMap = const (attrMap Vty.defAttr theme)
+  }
+
+withHighlight False = withDefAttr dimAttr
+withHighlight True  = withDefAttr selectedAttr
+
+drawUi :: UiState -> [UiWidget]
+drawUi ui =
+  [ borderWithLabel (txt "Restless Mail") $
+      renderList
+        (\selected x ->
+           withHighlight selected $
+             vBox [ hBox
+                    [ txt (summaryFrom x)
+                    , padLeft Max . padRight (Pad 1) . str . show $ summaryDate x
+                    ]
+                  , txt (Text.take 60 (summarySubject x))
+                  , txt " "
+                  ])
+        True
+        (view uiSummaryList ui)
+  ]
+
+selectedAttr :: AttrName; selectedAttr = "selected"
+dimAttr :: AttrName; dimAttr = "dim"
+
+theme :: [(AttrName, Vty.Attr)]
+theme =
+  [ (selectedAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
+  , (dimAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
+  , (borderAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
+  ]
+
+  -- forM_ summaries (LazyText.putStrLn . displaySummary)
+
+  -- run 1025 $ simpleCors (serve (Proxy :: Proxy MailAPI)
+  --                          (return (toList summaries)))
+
+displaySummary :: Summary -> LazyText.Text
+displaySummary x = format "{}\n{}\n{}\n{}\n"
+  ( summaryId x
+  , show (summaryDate x)
+  , summaryFrom x
+  , summarySubject x
+  )
+
+scan maildir =
+  Pipes.fold (Seq.|>) mempty id .
+    for (every (childOf maildir)) $ \path -> do
+      result <- liftIO (mail path)
+      case result of
+        Just (Right x) ->
+          yield x
+        _ ->
+          return ()
+
+idFromPath x =
+  case toText (filename x) of
+    Left _ -> error "dumb"
+    Right s -> fst (Text.breakOn ":" s)
+
+mail path =
+  withFile path ReadMode $ \h ->
+    do x <- evalStateT
+              (Pipes.Attoparsec.parse (parseSummary (idFromPath path)))
+              (fromHandle h)
+       return x
 
 peekLineChar :: A8.Parser ()
 peekLineChar =

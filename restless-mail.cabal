@@ -29,7 +29,7 @@ executable restless-mail
   default-language:
     Haskell2010
   ghc-options:
-    -O2
+    -O2 -threaded
   build-depends:
     base >=4.9 && <4.10,
     dirstream,
@@ -40,6 +40,7 @@ executable restless-mail
     pipes-safe,
     attoparsec,
     text,
+    text-format,
     time,
     bytestring,
     system-filepath,
@@ -51,4 +52,8 @@ executable restless-mail
     servant-server,
     wai,
     warp,
-    wai-cors
+    wai-cors,
+    brick,
+    vty,
+    lens,
+    vector
