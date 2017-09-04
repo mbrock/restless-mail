@@ -107,10 +107,19 @@ data UiState = UiState
 
 makeLenses ''UiState
 
+summaryFilter :: Maybe Text -> Summary -> Bool
+summaryFilter Nothing _ = True
+summaryFilter (Just f) s =
+  Text.isInfixOf (Text.toLower f) (Text.toLower (summaryFrom s))
+    || Text.isInfixOf (Text.toLower f) (Text.toLower (summarySubject s))
+
 main :: IO ()
 main = do
-  maildir <- fromString <$> getEnv "MAILDIR"
-  summaries <- Seq.sort <$> runSafeT (scan maildir)
+  maildir   <- fromString <$> getEnv "MAILDIR"
+  filter    <- fmap fromString <$> lookupEnv "FILTER"
+  summaries <-
+    Seq.sort . Seq.filter (summaryFilter filter)
+      <$> runSafeT (scan maildir)
 
   _ <- defaultMain app $
     UiState
