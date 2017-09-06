@@ -3,33 +3,15 @@ module Restless.Mail.Parser where
 import Restless.Mail
 
 import Control.Applicative ((<|>), many)
-import Control.Lens
-import Control.Monad (unless)
-import Data.Aeson
+import Control.Lens ()
+import Control.Monad (unless, mzero)
 import Data.ByteString (ByteString)
-import Data.DirStream
-import Data.Foldable (forM_, toList)
-import Data.Foldable (toList)
 import Data.List (find)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
-import Data.Sequence (Seq)
-import Data.String
 import Data.Text (Text)
-import Data.Text.Format
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Format
-import Data.Thyme.Format.Aeson
 import Data.Word (Word8)
-import Filesystem
-import Filesystem.Path.CurrentOS
-import GHC.Generics
-import Pipes hiding (Proxy)
-import Pipes.ByteString (fromHandle)
-import Pipes.Parse
-import Pipes.Safe
-import System.Directory (createDirectoryIfMissing, copyFile)
-import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
 import System.Locale
 
@@ -39,19 +21,11 @@ import qualified Data.Attoparsec.ByteString       as A
 import qualified Data.Attoparsec.ByteString.Char8 as A8
 import qualified Data.ByteString                  as BS
 import qualified Data.Map                         as Map
-import qualified Data.Sequence                    as Seq
-import qualified Data.Set                         as Set
-import qualified Data.Text                        as Text
 import qualified Data.Text.Encoding               as Text
 import qualified Data.Text.Encoding.Error         as Text (lenientDecode)
 import qualified Data.Text.ICU.Convert            as ICU
-import qualified Data.Text.IO                     as Text
-import qualified Data.Text.Lazy                   as LazyText
-import qualified Data.Text.Lazy.IO                as LazyText
-import qualified Data.Vector                      as Vec
-import qualified Pipes.Attoparsec
-import qualified Pipes.Prelude                    as Pipes
 
+parseTags :: A8.Parser [(Text, Text)]
 parseTags = A.sepBy p (A8.char '\n')
   where
     p = do
@@ -80,7 +54,6 @@ getMimeWords bs =
   case A.parseOnly mimeWords bs of
     Left s  -> error s
     Right x -> x
-
 
 decoders :: Map.Map ByteString ICU.Converter
 decoders = Map.fromList . map (\(x, y) -> (x, f y)) $
@@ -115,10 +88,11 @@ mimeWords = mconcat <$> many (p1 <|> p2)
                 case BS.map toLower mode of
                   "q" -> QuotedPrintable.decode
                   "b" -> Base64.decode
+                  _   -> error "bad email"
           case decrypter body of
             Left _  -> error "bad email"
             Right x -> pure (ICU.toUnicode decoder x)
-        x ->
+        _ ->
           decodeUtf8 <$> A8.takeTill (== '=')
     p2 = do
       _ <- A.peekWord8'
@@ -131,6 +105,7 @@ foldWhitespace =
       (A.takeWhile1 (not . A8.isEndOfLine))
       (A8.endOfLine >> peekHorizontalSpace)
 
+subparse :: Monad m => A8.Parser a -> ByteString -> m a
 subparse p bs =
   case A.parseOnly p bs of
     Left s  -> fail s
