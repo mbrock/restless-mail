@@ -1,20 +1,27 @@
-{-# Language TemplateHaskell #-}
 {-# Language DataKinds #-}
-{-# Language TypeOperators #-}
 {-# Language DeriveGeneric #-}
-{-# Language OverloadedStrings #-}
 {-# Language LambdaCase #-}
+{-# Language OverloadedStrings #-}
+{-# Language RecordWildCards #-}
+{-# Language TemplateHaskell #-}
+{-# Language TypeOperators #-}
 
 module Main where
 
 import Restless.Mail
 import Restless.Mail.Parser
 
+import qualified Restless.Git as Git
+
+import Control.Monad      (forM)
+import Data.ByteString    (ByteString)
 import Data.DirStream     (childOf)
-import Data.Foldable      (forM_)
+import Data.Foldable      (toList)
+import Data.Set           (Set)
 import Data.Sequence      (Seq)
 import Data.String        (fromString)
-import Data.Text          (Text)
+import Data.Text          (Text, pack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Format   (format)
 import Data.Thyme.Format  (formatTime)
 import Filesystem         (IOMode (ReadMode), withFile)
@@ -22,15 +29,16 @@ import Pipes hiding       (Proxy)
 import Pipes.ByteString   (fromHandle)
 import Pipes.Parse        (evalStateT)
 import Pipes.Safe         (MonadSafe, runSafeT)
-import System.Directory   (createDirectoryIfMissing, copyFile)
 import System.Environment (getEnv)
 import System.Locale      (defaultTimeLocale)
 
-import qualified Filesystem.Path.CurrentOS        as OS
+import qualified Data.ByteString                  as BS
 import qualified Data.Map                         as Map
+import qualified Data.Set                         as Set
 import qualified Data.Sequence                    as Seq
 import qualified Data.Text                        as Text
 import qualified Data.Text.Lazy                   as LazyText
+import qualified Filesystem.Path.CurrentOS        as OS
 import qualified Pipes.Attoparsec
 import qualified Pipes.Prelude                    as Pipes
 
@@ -43,21 +51,34 @@ main = do
   let tagmap = Map.fromList taglist
 --  let senders = summaries & fmap summaryFrom & toList & Set.fromList & toList & Seq.fromList & Seq.sort
 
-  forM_ summaries $ \x -> do
+  files <- forM (toList summaries) $ \x -> do
     case Map.lookup (summaryFrom x) tagmap of
-      Nothing -> pure ()
-      Just tag -> do
-        let dir = home ++ "/mail/" ++ subdir tag x
-        createDirectoryIfMissing True dir
-        System.Directory.copyFile (summaryPath x) (dir ++ "/" ++ "mail")
+      Nothing  -> pure mempty
+      Just tag -> mailToFiles tag x
+
+  metadata <- Git.Metadata "x" "y" "z" <$> Git.now
+  Git.save (home ++ "/mail") metadata (mconcat files)
 
   return ()
 
-subdir :: Text -> Summary -> String
+mailToFiles :: Text -> Summary -> IO (Set Git.File)
+mailToFiles tag summary = do
+  bytes <- BS.readFile (summaryPath summary)
+  return . Set.fromList $ f summary bytes
+  where
+    f :: Summary -> ByteString -> [Git.File]
+    f Summary {..} bytes =
+      [ Git.File (Git.Path (subdir tag summary) "mail") bytes ]
+
+subdir :: Text -> Summary -> [ByteString]
 subdir tag x =
-  formatTime defaultTimeLocale "%Y-%m" (summaryDate x) ++ "/" ++ Text.unpack tag
-    ++ " " ++ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S" (summaryDate x)
-    ++ " " ++ Text.unpack (Text.replace "/" "-SLASH-" (summarySubject x))
+    [ encodeUtf8 . pack $ formatTime defaultTimeLocale "%Y-%m" (summaryDate x)
+    , encodeUtf8 $ mconcat
+      [ tag , " "
+      , pack $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S" (summaryDate x)
+      , " " , Text.replace "/" "-SLASH-" (summarySubject x)
+      ]
+    ]
 
 displaySummary :: Summary -> LazyText.Text
 displaySummary x = format "{}\n{}\n{}\n{}\n"

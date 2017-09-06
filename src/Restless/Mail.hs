@@ -5,7 +5,10 @@ import Data.Text (Text)
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Format ()
 import Data.Ord (comparing)
+import Data.Set (Set)
 import GHC.Generics (Generic)
+
+import qualified Data.Set as Set
 
 data Summary = Summary
   { summaryId      :: Text
@@ -22,3 +25,5 @@ data HeaderField = HeaderField
   { headerName :: ByteString
   , headerBody :: ByteString
   } deriving (Show, Ord, Eq)
+
+data Archive = Archive (Set Summary)
