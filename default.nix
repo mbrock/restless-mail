@@ -1,8 +1,8 @@
-{ mkDerivation, aeson, attoparsec, base, brick, bytestring
-, containers, dirstream, lens, old-locale, pipes, pipes-attoparsec
-, pipes-bytestring, pipes-parse, pipes-safe, servant-server, stdenv
-, system-fileio, system-filepath, text, text-format, thyme, time
-, vector, vty, wai, wai-cors, warp
+{ mkDerivation, aeson, attoparsec, base, bytestring, containers
+, directory, dirstream, lens, old-locale, pipes, pipes-attoparsec
+, pipes-bytestring, pipes-parse, pipes-safe, sandi, stdenv
+, system-fileio, system-filepath, text, text-format, text-icu
+, thyme, time, vector
 }:
 mkDerivation {
   pname = "restless-mail";
@@ -11,10 +11,10 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    aeson attoparsec base brick bytestring containers dirstream lens
-    old-locale pipes pipes-attoparsec pipes-bytestring pipes-parse
-    pipes-safe servant-server system-fileio system-filepath text
-    text-format thyme time vector vty wai wai-cors warp
+    aeson attoparsec base bytestring containers directory dirstream
+    lens old-locale pipes pipes-attoparsec pipes-bytestring pipes-parse
+    pipes-safe sandi system-fileio system-filepath text text-format
+    text-icu thyme time vector
   ];
   homepage = "https://less.rest/mail";
   description = "The perfect mail client";
