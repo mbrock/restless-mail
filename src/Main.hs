@@ -68,7 +68,10 @@ mailToFiles tag summary = do
   where
     f :: Summary -> ByteString -> [Git.File]
     f Summary {..} bytes =
-      [ Git.File (Git.Path (subdir tag summary) "mail") bytes ]
+      [ Git.File (Git.Path (subdir tag summary) "mail") bytes
+      , Git.File (Git.Path (subdir tag summary) "from")
+          (encodeUtf8 summaryFrom)
+      ]
 
 subdir :: Text -> Summary -> [ByteString]
 subdir tag x =
